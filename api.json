@@ -1,0 +1,20 @@
+{
+  "device": {
+    "friendlyName": "ch-step-log-clean",
+    "manufacturer": "ch-packs",
+    "modelDescription": "Step module of the ch-packs family: cleans one GitHub Actions job log into its steps, so later steps see the output a person would read and nothing else. A pure function of its input: no disk, no network, no state.",
+    "serviceList": {
+      "urn:ch-packs:serviceID:cleanService": {
+        "actionList": [
+          {
+            "name": "clean",
+            "description": "Cleans one GitHub Actions job log, as the logs endpoint returns it, into steps. Strips the byte-order mark, the timestamp on every line, ANSI escapes (colours, hyperlinks, character sets), group markers, progress lines (a bare percentage, git's object and delta counters) and blank lines; keeps ##[error] and ##[warning] lines with their marker. A step starts at its '##[group]Run <command>' header (the runner's, which echoes the command, lists a uses: step's inputs, or is empty; not a group a script opens) and is named after it; the header's own lines are dropped; post steps start at 'Post job cleanup.'; lines before the first step are the step '(top)'. Returns the steps in order, how many lines the log had and how many were kept.",
+            "input": {"schema": "/cleanService/clean/input"},
+            "output": {"schema": "/cleanService/clean/output"},
+            "fault": {"schema": "/fault/cleanService/clean/fault"}
+          }
+        ]
+      }
+    }
+  }
+}

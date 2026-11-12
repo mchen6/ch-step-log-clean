@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "#/",
+  "type": "object",
+  "cleanService": {
+    "clean": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "title": "one job log, raw",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "title": "the steps, in log order",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "title": "the step header without its marker, \"(top)\" before the first, \"Post job cleanup\" for post steps",
+                  "type": "string"
+                },
+                "lines": {
+                  "title": "the step lines kept, cleaned",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "lines"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "totalLines": {
+            "title": "lines in the log",
+            "type": "integer",
+            "minimum": 0
+          },
+          "kept": {
+            "title": "lines kept across all steps",
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "steps",
+          "totalLines",
+          "kept"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "fault": {
+    "cleanService": {
+      "clean": {
+        "fault": {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "title": "specific error reason",
+              "type": "string"
+            },
+            "info": {
+              "title": "detailed error info",
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

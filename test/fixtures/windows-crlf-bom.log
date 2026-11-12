@@ -1,0 +1,10 @@
+﻿2026-11-11T19:00:10.1000000Z Current runner version: '2.338.2'
+2026-11-11T19:00:10.1004137Z Complete job name: test (windows-latest, 24)
+2026-11-11T19:00:10.1008274Z ##[group]Run tests
+2026-11-11T19:00:10.1012411Z [36;1mnpm test[0m
+2026-11-11T19:00:10.1016548Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-11T19:00:10.1020685Z ##[endgroup]
+2026-11-11T19:00:10.1024822Z Downloading 10%Downloading 55%Downloading 100%
+2026-11-11T19:00:10.1028959Z not ok 1 - reads the config
+2026-11-11T19:00:10.1033096Z   Error: ENOENT: no such file or directory, open 'C:\a\widgets\widgets\config.json'
+2026-11-11T19:00:10.1037233Z ##[error]Process completed with exit code 1.

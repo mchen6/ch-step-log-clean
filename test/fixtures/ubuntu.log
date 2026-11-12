@@ -1,0 +1,35 @@
+﻿2026-11-11T19:00:10.1000000Z Current runner version: '2.338.2'
+2026-11-11T19:00:10.1004137Z ##[group]Runner Image
+2026-11-11T19:00:10.1008274Z Image: ubuntu-24.04
+2026-11-11T19:00:10.1012411Z ##[endgroup]
+2026-11-11T19:00:10.1016548Z Complete job name: test (ubuntu-latest, 24)
+2026-11-11T19:00:10.1020685Z ##[group]Run actions/checkout@v4
+2026-11-11T19:00:10.1024822Z with:
+2026-11-11T19:00:10.1028959Z   repository: example/widgets
+2026-11-11T19:00:10.1033096Z ##[endgroup]
+2026-11-11T19:00:10.1037233Z Syncing repository: example/widgets
+2026-11-11T19:00:11.1041370Z ##[group]Fetching the repository
+2026-11-11T19:00:11.1045507Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --depth=1 origin
+2026-11-11T19:00:11.1049644Z Receiving objects:  45% (90/200)
+2026-11-11T19:00:11.1053781Z Receiving objects: 100% (200/200), done.
+2026-11-11T19:00:11.1057918Z Resolving deltas: 100% (12/12), done.
+2026-11-11T19:00:11.1062055Z ##[endgroup]
+2026-11-11T19:00:11.1066192Z ##[group]Run npm test
+2026-11-11T19:00:11.1070329Z [36;1mnpm test[0m
+2026-11-11T19:00:11.1074466Z shell: /usr/bin/bash -e {0}
+2026-11-11T19:00:11.1078603Z ##[endgroup]
+2026-11-11T19:00:12.1082740Z 
+2026-11-11T19:00:12.1086877Z > widgets@1.0.0 test
+2026-11-11T19:00:12.1091014Z > node --test
+2026-11-11T19:00:12.1095151Z 
+2026-11-11T19:00:12.1099288Z  45%
+2026-11-11T19:00:12.1103425Z |
+2026-11-11T19:00:12.1107562Z [31m✖ adds two numbers (2.1ms)[39m
+2026-11-11T19:00:12.1111699Z   AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+2026-11-11T19:00:12.1115836Z   3 !== 4
+2026-11-11T19:00:12.1119973Z       at TestContext.<anonymous> (/home/runner/work/widgets/widgets/test/add.test.js:7:10)
+2026-11-11T19:00:13.1124110Z ##[error]Process completed with exit code 1.
+2026-11-11T19:00:13.1128247Z Post job cleanup.
+2026-11-11T19:00:13.1132384Z [command]/usr/bin/git version
+2026-11-11T19:00:13.1136521Z git version 2.56.0
+2026-11-11T19:00:13.1140658Z Cleaning up orphan processes
