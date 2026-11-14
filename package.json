@@ -1,6 +1,6 @@
 {
   "name": "@countinghouse/ch-step-log-clean",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "countinghouse step module: one GitHub Actions job log cleaned into steps: timestamps, ANSI escapes, group markers, progress and blank lines removed.",
   "license": "Apache-2.0",
   "repository": {

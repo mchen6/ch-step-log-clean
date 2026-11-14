@@ -161,3 +161,29 @@ test('an empty group a script opens is not a step, even when named "Run …"; an
     ['Run make db', ['migrated']], ['Run actions/cache@v4', ['Cache restored']], ['Run docker://alpine:3', ['ran']]
   ]);
 });
+
+test('a line over 20000 characters is omitted whole, never cut: no secret across the cut is kept, whatever its quoting', async () => {
+  const jwt = `eyJhbGciOiJIUzI1NiJ9.eyJ${'a'.repeat(19470)}.${'s'.repeat(20)}`;
+  const across = (secret) => `${jwt} ${'x'.repeat(20000 - jwt.length - 8)} ${secret} tail`;
+  const secrets = [`ghp_${'A1b2C3d4E5'.repeat(4)}`, 'password="Zq9 Wx7 Kp3 Mn5 Rt8"', '{"password": "Zq9 Wx7 Kp3 Mn5 Rt8"}', "API_KEY='Zq9 Wx7 Kp3 Mn5 Rt8'"];
+  const long = secrets.map(across);
+  for (const l of long) assert.ok(l.length > 20000);
+  const {output} = await clean({text: `${long.join('\n')}\nshort line\n${'y'.repeat(20000)}\n`});
+  const lines = output.steps.flatMap((s) => s.lines);
+  assert.deepStrictEqual(lines.slice(0, 4), long.map((l) => `(a line of ${l.length} characters, omitted)`));
+  assert.deepStrictEqual(lines.slice(4).map((l) => l.length), [10, 20000], 'up to 20000 kept as it is');
+  const schema = require('../schema.json');
+  const svc = Object.keys(schema).find((k) => schema[k] != null && schema[k].clean != null);
+  assert.strictEqual(schema[svc].clean.output.properties.steps.items.properties.lines.items.maxLength, 20000);
+});
+
+test('a step name read from its header is at most 200 characters, and the schema says so', async () => {
+  const command = `npm test -- ${'x'.repeat(400)}`;
+  const text = `##[group]Run ${command}\n\u001b[36;1m${command}\u001b[0m\n##[endgroup]\nok\n`;
+  const {output} = await clean({text});
+  const step = output.steps.find((s) => s.lines.includes('ok'));
+  assert.strictEqual(step.name, `Run ${command}`.slice(0, 199) + '…');
+  const schema = require('../schema.json');
+  const svc = Object.keys(schema).find((k) => schema[k] != null && schema[k].clean != null);
+  assert.strictEqual(schema[svc].clean.output.properties.steps.items.properties.name.maxLength, 200);
+});
