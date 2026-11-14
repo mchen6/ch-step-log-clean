@@ -34,7 +34,8 @@
                   "title": "the step lines kept, cleaned",
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 20000
                   }
                 }
               },

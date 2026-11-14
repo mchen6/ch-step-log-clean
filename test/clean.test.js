@@ -161,3 +161,16 @@ test('an empty group a script opens is not a step, even when named "Run …"; an
     ['Run make db', ['migrated']], ['Run actions/cache@v4', ['Cache restored']], ['Run docker://alpine:3', ['ran']]
   ]);
 });
+
+test('every kept line is at most 20000 characters (redact\'s input bound), cut with …, never between the halves of a surrogate pair', async () => {
+  const long = `2026-11-13T20:03:50.0000000Z ${'x'.repeat(25000)}`;
+  const pair = `${'p'.repeat(19998)}\u{1F600}${'q'.repeat(10)}`;
+  const {output} = await clean({text: `${long}\nshort line\n${'y'.repeat(900)}\n${pair}\n`});
+  const lines = output.steps.flatMap((s) => s.lines);
+  assert.deepStrictEqual(lines.map((l) => l.length), [20000, 10, 900, 19999]);
+  assert.strictEqual(lines[0], `${'x'.repeat(19999)}…`);
+  assert.strictEqual(lines[3], `${'p'.repeat(19998)}…`, 'the pair at 19998-19999 is not split');
+  const schema = require('../schema.json');
+  const svc = Object.keys(schema).find((k) => schema[k] != null && schema[k].clean != null);
+  assert.strictEqual(schema[svc].clean.output.properties.steps.items.properties.lines.items.maxLength, 20000);
+});
