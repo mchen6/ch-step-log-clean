@@ -162,16 +162,16 @@ test('an empty group a script opens is not a step, even when named "Run …"; an
   ]);
 });
 
-test('every kept line is at most 20000 characters (redact\'s input bound), cut back to a character no secret holds, with …', async () => {
-  const words = `${'w '.repeat(12000)}`;   // a boundary every other character
-  const token = `ghp_${'A1b2C3d4E5'.repeat(4)}`;
-  const straddle = `${'p '.repeat(9995)}${token} after`;   // the token runs across the 20000th character
-  const {output} = await clean({text: `${words}\nshort line\n${'y'.repeat(900)}\n${straddle}\n${'z'.repeat(25000)}\n`});
+test('a line over 20000 characters is omitted whole, never cut: no secret across the cut is kept, whatever its quoting', async () => {
+  const jwt = `eyJhbGciOiJIUzI1NiJ9.eyJ${'a'.repeat(19470)}.${'s'.repeat(20)}`;
+  const across = (secret) => `${jwt} ${'x'.repeat(20000 - jwt.length - 8)} ${secret} tail`;
+  const secrets = [`ghp_${'A1b2C3d4E5'.repeat(4)}`, 'password="Zq9 Wx7 Kp3 Mn5 Rt8"', '{"password": "Zq9 Wx7 Kp3 Mn5 Rt8"}', "API_KEY='Zq9 Wx7 Kp3 Mn5 Rt8'"];
+  const long = secrets.map(across);
+  for (const l of long) assert.ok(l.length > 20000);
+  const {output} = await clean({text: `${long.join('\n')}\nshort line\n${'y'.repeat(20000)}\n`});
   const lines = output.steps.flatMap((s) => s.lines);
-  assert.ok(lines[0].length <= 20000 && lines[0].endsWith(' …'), lines[0].slice(-10));
-  assert.deepStrictEqual(lines.slice(1, 3).map((l) => l.length), [10, 900]);
-  assert.ok(!lines[3].includes('ghp_'), 'the split token is not kept');
-  assert.strictEqual(lines[4], '…', 'no boundary: nothing kept');
+  assert.deepStrictEqual(lines.slice(0, 4), long.map((l) => `(a line of ${l.length} characters, omitted)`));
+  assert.deepStrictEqual(lines.slice(4).map((l) => l.length), [10, 20000], 'up to 20000 kept as it is');
   const schema = require('../schema.json');
   const svc = Object.keys(schema).find((k) => schema[k] != null && schema[k].clean != null);
   assert.strictEqual(schema[svc].clean.output.properties.steps.items.properties.lines.items.maxLength, 20000);
