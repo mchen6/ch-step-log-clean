@@ -28,7 +28,8 @@
               "properties": {
                 "name": {
                   "title": "the step header without its marker, \"(top)\" before the first, \"Post job cleanup\" for post steps",
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 "lines": {
                   "title": "the step lines kept, cleaned",

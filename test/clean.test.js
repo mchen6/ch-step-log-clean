@@ -162,15 +162,28 @@ test('an empty group a script opens is not a step, even when named "Run …"; an
   ]);
 });
 
-test('every kept line is at most 20000 characters (redact\'s input bound), cut with …, never between the halves of a surrogate pair', async () => {
-  const long = `2026-11-13T20:03:50.0000000Z ${'x'.repeat(25000)}`;
-  const pair = `${'p'.repeat(19998)}\u{1F600}${'q'.repeat(10)}`;
-  const {output} = await clean({text: `${long}\nshort line\n${'y'.repeat(900)}\n${pair}\n`});
+test('every kept line is at most 20000 characters (redact\'s input bound), cut back to a character no secret holds, with …', async () => {
+  const words = `${'w '.repeat(12000)}`;   // a boundary every other character
+  const token = `ghp_${'A1b2C3d4E5'.repeat(4)}`;
+  const straddle = `${'p '.repeat(9995)}${token} after`;   // the token runs across the 20000th character
+  const {output} = await clean({text: `${words}\nshort line\n${'y'.repeat(900)}\n${straddle}\n${'z'.repeat(25000)}\n`});
   const lines = output.steps.flatMap((s) => s.lines);
-  assert.deepStrictEqual(lines.map((l) => l.length), [20000, 10, 900, 19999]);
-  assert.strictEqual(lines[0], `${'x'.repeat(19999)}…`);
-  assert.strictEqual(lines[3], `${'p'.repeat(19998)}…`, 'the pair at 19998-19999 is not split');
+  assert.ok(lines[0].length <= 20000 && lines[0].endsWith(' …'), lines[0].slice(-10));
+  assert.deepStrictEqual(lines.slice(1, 3).map((l) => l.length), [10, 900]);
+  assert.ok(!lines[3].includes('ghp_'), 'the split token is not kept');
+  assert.strictEqual(lines[4], '…', 'no boundary: nothing kept');
   const schema = require('../schema.json');
   const svc = Object.keys(schema).find((k) => schema[k] != null && schema[k].clean != null);
   assert.strictEqual(schema[svc].clean.output.properties.steps.items.properties.lines.items.maxLength, 20000);
+});
+
+test('a step name read from its header is at most 200 characters, and the schema says so', async () => {
+  const command = `npm test -- ${'x'.repeat(400)}`;
+  const text = `##[group]Run ${command}\n\u001b[36;1m${command}\u001b[0m\n##[endgroup]\nok\n`;
+  const {output} = await clean({text});
+  const step = output.steps.find((s) => s.lines.includes('ok'));
+  assert.strictEqual(step.name, `Run ${command}`.slice(0, 199) + '…');
+  const schema = require('../schema.json');
+  const svc = Object.keys(schema).find((k) => schema[k] != null && schema[k].clean != null);
+  assert.strictEqual(schema[svc].clean.output.properties.steps.items.properties.name.maxLength, 200);
 });
