@@ -3,9 +3,12 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-require('./support');
 const {cleanLog} = require('../lib/clean');
-const clean = require('../handlers/cleanService/clean');
+const {CountinghouseError} = require('countinghouse/lib/countinghouse-error');
+// the handler as the runtime calls it: (input, ctx), ctx.error the runtime's
+const ctx = {error: (code, message, details) => CountinghouseError.module(code, message, details)};
+const handler = require('../handlers/cleanService/clean');
+const clean = Object.assign((input) => handler(input, ctx), handler);
 
 const fixture = (name) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
 
@@ -127,7 +130,7 @@ test('handler wraps cleanLog and refuses a non-string', async () => {
   const {output} = await clean({text: fixture('ubuntu.log')});
   assert.deepStrictEqual(output, cleanLog(fixture('ubuntu.log')));
   for (const bad of [{}, {text: 7}, {text: ['a']}, null]) {
-    await assert.rejects(clean(bad), (err) => err.code === 'ARGUMENTS_INVALID', JSON.stringify(bad));
+    await assert.rejects(clean(bad), (err) => err.code === 'INPUT_REJECTED', JSON.stringify(bad));
   }
 });
 
