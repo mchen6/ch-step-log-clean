@@ -27,7 +27,7 @@
     "role": "part"
   },
   "devDependencies": {
-    "@countinghouse/ch-step-redact": "github:mchen6/ch-step-redact#542fef63d558059deb622f08300dfd971e2cfa7f",
+    "@countinghouse/ch-step-redact": "github:mchen6/ch-step-redact#f4732dc4cb8b8db33626ab2d656fddc130ed06dd",
     "countinghouse": "git+https://github.com/mchen6/countinghouse.git#c26b9fcbe484a0fb4f902ab6d45ec2062f20bf33"
   },
   "allowScripts": {
