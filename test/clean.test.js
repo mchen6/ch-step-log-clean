@@ -268,7 +268,7 @@ test('L2: an omitted bare key body line leaves ch-step-redact\'s bare-body state
   }
 });
 
-test('L3: every escape sequence goes, and a control left over is a space: no letter is glued to a token', () => {
+test('L3: every escape sequence goes, and a control left over goes too: no letter is glued to a token', () => {
   const E = '\u001b';
   const ghp = 'ghp_' + 'a1B2'.repeat(9);
   const lines = [`${E}[38:5:208m${ghp}${E}[0m`, `${E}[38:2::255:0:0m${ghp}`, `${E}[>4;2m${ghp}`, `\u009b32m${ghp}\u009b0m`, `${E}x${ghp}`, `a\u0007${ghp}`];
@@ -290,7 +290,11 @@ test('L4: the runtime\'s hidden characters (tags, bidi, zero-width) never pass: 
   const out = cleanLog(`first\n${line}\n`).steps[0].lines[1];
   const {hiddenClass} = require('countinghouse/lib/conditions-why.json');
   assert.ok(!new RegExp(`[${hiddenClass}]`, 'u').test(out), JSON.stringify(out));
+  // (removed, but a whitespace one -- U+FEFF -- or a blank filler -- U+3164 --
+  // is a space, as a screen shows it)
+  // (inside a word every one is removed, a whitespace one too)
   assert.strictEqual(out, 'Error: x' + 'y'.repeat(hidden.length - 1) + 'z');
+  assert.deepStrictEqual(cleanLog('a \ufeff b').steps[0].lines, ['a   b'].map((l) => l.replace(/ +/g, (m) => m)));
 });
 
 test('L4: the hidden class is the runtime\'s own (lib/conditions-why.json hiddenClass)', () => {
@@ -299,7 +303,7 @@ test('L4: the hidden class is the runtime\'s own (lib/conditions-why.json hidden
 });
 
 // The medium on L1-L4.
-test('L3 medium: an escape between a letter and a token is a space; an ESC with intermediates never eats a token\'s first letter', () => {
+test('L3 medium: an escape between a letter and a token is a space (an ESC\'s final byte is its own: ruled)', () => {
   const E = '\u001b';
   const ghp = 'ghp_' + 'a1B2'.repeat(9);
   // (an ESC, intermediates and a token's first letter: the letter is the
@@ -378,4 +382,38 @@ test('F5: an omitted bare key body after a marker leaves ch-step-redact\'s state
     assert.ok(!viaClean.includes(b.slice(0, 30)), viaClean.slice(0, 300));
   }
   assert.ok(cleanLog(raw.join('\n')).steps[0].lines[0].startsWith('##[debug]'), 'the marker kept');
+});
+
+// The medium on the high's round (F1-F5).
+test('F1 medium: one pass, linear on long lines of escapes and hidden characters', () => {
+  // (a 360 KB line of each: a quadratic pass took 25 s on the zero-width
+  // one; linear, well under a second, a loaded runner allowed for)
+  const t = Date.now();
+  for (const unit of ['a\u200b', 'a\u001b[0m', 'a\u001b[0mghp_']) cleanLog(unit.repeat(Math.floor(360000 / unit.length)));
+  assert.ok(Date.now() - t < 8000, `${Date.now() - t} ms`);
+});
+
+test('F1 medium: a gap a screen shows as space stays a space; heads and tails a token needs are kept apart', () => {
+  const E = '\u001b';
+  const tok = 'abcdefghijklmnopqrstuv0123456789';
+  const cases = [
+    // (a gap a screen shows as space, next to punctuation: a space)
+    [`--password \u000b${tok}`, tok], [`Authorization:\u2028Bearer ${tok}`, tok], [`password=${E}[1C${tok}`, tok],
+    [`x${E}[0mBearer ${tok}`, tok], [`x${E}[0mb3BlbnNzaC1rZXktdjE${'A'.repeat(60)}`, 'A'.repeat(40)], [`+${E}[0mM` + `IIB${'A'.repeat(60)}`, 'A'.repeat(40)],
+    [`key: AKIA` + `IOSFODNN7EXAMPLE${E}[0mfoo`, 'IOSFODNN7EXAMPLE'], [`npm_${'a1B2'.repeat(9)}${E}[0mabc`, 'a1B2a1B2'],
+    [`x${E}]8;;${'q'.repeat(100)}\u0007gh${'\u200b'.repeat(70)}p_${'a1B2'.repeat(9)}`, 'a1B2a1B2']
+  ];
+  for (const [raw, needle] of cases) {
+    const out = redactLib.redactLines(cleanLog(raw).steps[0].lines).lines.join('\n');
+    assert.ok(!out.includes(needle), `${JSON.stringify(raw)} -> ${JSON.stringify(out)}`);
+  }
+});
+
+test('F1 medium: a hidden character never turns printed text into a group marker or hides a step header', () => {
+  const E = '\u001b';
+  const out = cleanLog(`before\n##[gr\u200boup]Run x\n${E}[36;1mx${E}[0m\n##[endgroup]\nafter\n`).steps.flatMap((s) => s.lines);
+  assert.ok(out.includes('after'), JSON.stringify(out));
+  assert.ok(out.some((l) => l.startsWith('##[gr')), JSON.stringify(out));
+  const {steps} = cleanLog(`##[group]Run\u2800x\n${E}[36;1mx${E}[0m\n##[endgroup]\nok\n`);
+  assert.deepStrictEqual(steps.map((s) => s.name), ['Run x']);
 });
