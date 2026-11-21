@@ -97,7 +97,8 @@ test('progress filters drop only progress: real lines that start with a percenta
 
 test('OSC hyperlinks and character-set escapes are stripped too', () => {
   const out = cleanLog(['see \x1b]8;;https://example.com/x\x07the docs\x1b]8;;\x07 now\x1b(B', 'a\x1b]0;title\x1b\\b'].join('\n'));
-  assert.deepStrictEqual(out.steps[0].lines, ['see the docs now', 'ab']);
+  // (an escape between two letters is a space: the medium on L3, 3)
+  assert.deepStrictEqual(out.steps[0].lines, ['see the docs now', 'a b']);
 });
 
 test('a step with no output is still a step; an empty (top) is left out', () => {
@@ -112,7 +113,7 @@ test('an empty log has no steps', () => {
 
 test('warning and error markers are kept, other ansi forms are stripped', () => {
   const out = cleanLog(['\x1b[1m\x1b[31m##[warning]disk almost full\x1b[0m', '##[error]boom', 'x\x1b[2Ky'].join('\n'));
-  assert.deepStrictEqual(out.steps[0].lines, ['##[warning]disk almost full', '##[error]boom', 'xy']);
+  assert.deepStrictEqual(out.steps[0].lines, ['##[warning]disk almost full', '##[error]boom', 'x y']);
 });
 
 test('a 5 MB log is cleaned in well under a second', () => {
@@ -294,4 +295,39 @@ test('L4: the runtime\'s hidden characters (tags, bidi, zero-width) never pass: 
 test('L4: the hidden class is the runtime\'s own (lib/conditions-why.json hiddenClass)', () => {
   const {HIDDEN_CLASS} = require('../lib/clean');
   assert.strictEqual(HIDDEN_CLASS, require('countinghouse/lib/conditions-why.json').hiddenClass);
+});
+
+// The medium on L1-L4.
+test('L3 medium: an escape between a letter and a token is a space; an ESC with intermediates never eats a token\'s first letter', () => {
+  const E = '\u001b';
+  const ghp = 'ghp_' + 'a1B2'.repeat(9);
+  const lines = [`x${E}[0m${ghp}`, `x\u009d0;t\u009c${ghp}`, `${E} ${ghp}`, `${E}#${ghp}`, `${E}x${ghp}`];
+  for (const l of cleanLog(lines.join('\n')).steps[0].lines) {
+    assert.ok(!redactLib.redactLines([l]).lines[0].includes('a1B2a1B2'), JSON.stringify(l));
+  }
+});
+
+test('L3 medium: a line of 8-bit OSC openers with no terminator stays linear', () => {
+  const t = Date.now();
+  cleanLog('\u009d'.repeat(200000));
+  cleanLog('\u001b]'.repeat(100000));
+  assert.ok(Date.now() - t < 2000, `${Date.now() - t} ms`);
+});
+
+test('L2 medium: an omitted OpenSSH key body line leaves ch-step-redact\'s state as the full line would', () => {
+  const head = 'b3BlbnNzaC1rZXktdjE';
+  const raw = [head + 'A'.repeat(LINE_MAX + 1), 'Q'.repeat(64), 'tail line'];
+  const direct = redactLib.redactLines(raw).lines;
+  const viaClean = redactLib.redactLines(cleanLog(raw.join('\n')).steps[0].lines).lines;
+  assert.strictEqual(viaClean.some((l) => l.includes('QQQQ')), direct.some((l) => l.includes('QQQQ')), JSON.stringify([direct, viaClean]));
+  assert.ok(!viaClean.some((l) => l.includes('QQQQ')), 'the body is masked');
+});
+
+test('L4 medium: a step header is found past hidden characters, in its group line and before its echo', () => {
+  const E = '\u001b';
+  const cases = [`##[group]Run y\n​${E}[36;1my${E}[0m\n##[endgroup]\nok2\n`, `##[group]​Run y\n${E}[36;1my${E}[0m\n##[endgroup]\nok2\n`, `##[group]Run\ty\n${E}[36;1my${E}[0m\n##[endgroup]\nok2\n`];
+  for (const c of cases) {
+    const {steps} = cleanLog(c);
+    assert.deepStrictEqual(steps.map((s) => [s.name, s.lines]), [['Run y', ['ok2']]], JSON.stringify(c));
+  }
 });
