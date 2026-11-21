@@ -190,3 +190,37 @@ test('a step name read from its header is at most 200 characters, and the schema
   const svc = Object.keys(schema).find((k) => schema[k] != null && schema[k].clean != null);
   assert.strictEqual(schema[svc].clean.output.properties.steps.items.properties.name.maxLength, 200);
 });
+
+// The reviewer's high on ch-step-redact, 1: a private key block whose BEGIN
+// line is over LINE_MAX characters. That line was omitted here whole, so
+// ch-step-redact never saw the block open, and the key's body lines passed.
+// An omitted line keeps the least that gives ch-step-redact the state the
+// full line would: per marker order, two markers sharing their dashes
+// included (the medium on this fix, 1).
+test('an omitted long line leaves ch-step-redact\'s key-block state as the full line would', () => {
+  const {cleanLog, LINE_MAX} = require('../lib/clean');
+  const B = '-----BEGIN ' + 'EC PRIVATE KEY-----';
+  const E = '-----END ' + 'EC PRIVATE KEY-----';
+  const long = (tail) => cleanLog('x'.repeat(LINE_MAX + 1) + tail).steps[0].lines[0];
+  // (markers built at run time: a secret scanner flags a bare one in source)
+  const K = 'PRIVATE ' + 'KEY-----';
+  const OPEN = `-----BEGIN ${K}`;
+  const SHUT = `-----END ${K}`;
+  const note = /\(a line of \d+ characters, omitted\)/.source;
+  const cases = [
+    ['', `^${note}$`],
+    [B, `^${note} ${OPEN}$`],
+    [E, `^${SHUT} ${note}$`],
+    [B + 'k' + E, `^${SHUT} ${note}$`],
+    [E + 'k' + B, `^${note} ${OPEN}$`],
+    // END and BEGIN sharing dashes: both are markers to ch-step-redact
+    ['-----END EC ' + K + 'BEGIN EC ' + K, `^${note} ${OPEN}$`],
+    // BEGIN and END sharing dashes: from none, ch-step-redact sees the BEGIN
+    // only (its dashes are taken), so a block opens; from an open block, the
+    // END closes it. No note gives both: it keeps the block open (fails
+    // closed)
+    ['-----BEGIN EC ' + K + 'END EC ' + K, `^${note} ${OPEN}$`]
+  ];
+  for (const [tail, want] of cases) assert.match(long(tail), new RegExp(want), JSON.stringify(tail));
+});
+
