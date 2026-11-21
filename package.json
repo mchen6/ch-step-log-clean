@@ -1,6 +1,6 @@
 {
   "name": "@countinghouse/ch-step-log-clean",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "countinghouse step module: one GitHub Actions job log cleaned into steps: timestamps, ANSI escapes, group markers, progress and blank lines removed.",
   "license": "Apache-2.0",
   "repository": {
@@ -27,6 +27,7 @@
     "role": "part"
   },
   "devDependencies": {
+    "@countinghouse/ch-step-redact": "github:mchen6/ch-step-redact#eb9f63861e1179a6aed929cf6b3ae925e3cd85ae",
     "countinghouse": "git+https://github.com/mchen6/countinghouse.git#c26b9fcbe484a0fb4f902ab6d45ec2062f20bf33"
   },
   "allowScripts": {
