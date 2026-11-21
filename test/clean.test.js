@@ -436,3 +436,19 @@ test('NAME_END is ch-step-redact\'s own', () => {
   assert.strictEqual(NAME_END.source, redactLib.NAME_END.source);
   assert.strictEqual(NAME_END.flags, redactLib.NAME_END.flags);
 });
+
+// The reviewer's g1 fuzz (one gap at every position): a gap before a
+// head-like run inside a token never splits it.
+test('a gap inside a token, before a head-like run, never splits it', () => {
+  const E = '\u001b';
+  const A20 = 'Ab3dEf6hIj9kLm2nOp5q';
+  const A13 = 'Rs8tUv1wXy4zA';
+  const cases = [`token ghp_${A20}${E}[1mmig${A13}`, `token ghp_${A20}${E}[1mMII${A13}`, `token ghp_${A20}​mhc${A13}`, `export GITHUB_TOKEN=Qx${A20}\u0001eyj${A13}`];
+  for (const raw of cases) {
+    const out = redactLib.redactLines(cleanLog(raw).steps[0].lines).lines.join('\n');
+    assert.ok(!out.includes(A13) && !out.includes(A20.slice(0, 8)), `${JSON.stringify(raw)} -> ${JSON.stringify(out)}`);
+  }
+  // (a head after a short word is still kept apart: x\e[0mghp_…)
+  const ghp = 'ghp_' + 'a1B2'.repeat(9);
+  assert.deepStrictEqual(redactLib.redactLines(cleanLog(`x${E}[0m${ghp}`).steps[0].lines).lines, ['x <githubToken>']);
+});
