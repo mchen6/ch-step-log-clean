@@ -185,7 +185,8 @@ test('a step name read from its header is at most 200 characters, and the schema
   const text = `##[group]Run ${command}\n\u001b[36;1m${command}\u001b[0m\n##[endgroup]\nok\n`;
   const {output} = await clean({text});
   const step = output.steps.find((s) => s.lines.includes('ok'));
-  assert.strictEqual(step.name, `Run ${command}`.slice(0, 199) + '…');
+  // (never cut mid-word: the pre-work high on pack 1, L1)
+  assert.strictEqual(step.name, 'Run npm test --…');
   const schema = require('../schema.json');
   const svc = Object.keys(schema).find((k) => schema[k] != null && schema[k].clean != null);
   assert.strictEqual(schema[svc].clean.output.properties.steps.items.properties.name.maxLength, 200);
@@ -224,3 +225,73 @@ test('an omitted long line leaves ch-step-redact\'s key-block state as the full 
   for (const [tail, want] of cases) assert.match(long(tail), new RegExp(want), JSON.stringify(tail));
 });
 
+
+// The reviewer's pre-work high on pack 1 (L1-L4), with the probes' inputs.
+// Values built at run time and plainly fake.
+const redactLib = require('@countinghouse/ch-step-redact/lib/rules');
+const FAKE_TOKEN = 'ghs_' + 'Ab3dE6'.repeat(6);
+const LINE_MAX = require('../lib/clean').LINE_MAX;
+const stepWith = (name, line) => `##[group]Run ${name}\n\u001b[36;1m${name}\u001b[0m\n##[endgroup]\n${line}\n`;
+
+test('L1: a step name over 200 characters is never cut mid-word: a token near the cut goes whole or stays whole', () => {
+  for (let pad = 150; pad <= 200; pad++) {
+    const command = `${'x'.repeat(pad)} git clone https://x-access-token:${FAKE_TOKEN}@github.com/o/r.git`;
+    const {steps} = cleanLog(stepWith(command, 'ok'));
+    const name = steps.find((s) => s.lines.includes('ok')).name;
+    assert.ok(name.length <= 200, `${pad}: ${name.length}`);
+    // (either the whole token, which ch-step-redact masks, or none of it)
+    const masked = redactLib.redactLines([name]).lines[0];
+    assert.ok(!masked.includes('Ab3dE6'), `${pad}: ${masked}`);
+  }
+  // (one word longer than the bound: never its head -- a name starts "Run ")
+  const {steps} = cleanLog(stepWith('x'.repeat(300), 'ok'));
+  assert.strictEqual(steps.find((s) => s.lines.includes('ok')).name, 'Run…');
+});
+
+test('L2: an omitted bare key body line leaves ch-step-redact\'s bare-body state as the full line would', () => {
+  const b64 = (n, seed) => { const a = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'; let s = ''; let x = seed; for (let i = 0; i < n; i++) { x = (x * 1103515245 + 12345) & 0x7fffffff; s += a[x % 64]; } return s; };
+  const body = [b64(64, 2), b64(64, 3), b64(40, 4) + '=='];
+  const runs = [
+    ['M' + 'II' + b64(LINE_MAX + 5000, 1), ...body],
+    ['M' + 'II' + b64(61, 5), 'M' + 'II' + b64(LINE_MAX + 5000, 6), ...body],
+    ['-----BEGIN ' + 'RSA PRIVATE KEY-----', 'M' + 'II' + b64(LINE_MAX + 5000, 7), ...body]
+  ];
+  for (const raw of runs) {
+    const direct = redactLib.redactLines(raw).lines.join('\n');
+    const viaClean = redactLib.redactLines(cleanLog(raw.join('\n')).steps[0].lines).lines.join('\n');
+    for (const l of body) {
+      assert.strictEqual(viaClean.includes(l.slice(0, 30)), direct.includes(l.slice(0, 30)), `${raw[0].slice(0, 20)}: ${viaClean.slice(0, 200)}`);
+      assert.ok(!viaClean.includes(l.slice(0, 30)), 'the body is masked');
+    }
+  }
+});
+
+test('L3: every escape sequence goes, and a control left over is a space: no letter is glued to a token', () => {
+  const E = '\u001b';
+  const ghp = 'ghp_' + 'a1B2'.repeat(9);
+  const lines = [`${E}[38:5:208m${ghp}${E}[0m`, `${E}[38:2::255:0:0m${ghp}`, `${E}[>4;2m${ghp}`, `\u009b32m${ghp}\u009b0m`, `${E}x${ghp}`, `a\u0007${ghp}`];
+  const {steps} = cleanLog(lines.join('\n'));
+  const out = steps[0].lines;
+  assert.strictEqual(out.length, lines.length);
+  for (const l of out) {
+    assert.ok(!/[\u0000-\u001f\u007f-\u009f]/.test(l), JSON.stringify(l));
+    assert.ok(!/[A-Za-z0-9]ghp_/.test(l), JSON.stringify(l));
+    assert.ok(!redactLib.redactLines([l]).lines[0].includes('a1B2a1B2'), JSON.stringify(l));
+  }
+  // (colours still go as before, and the text between them stays)
+  assert.deepStrictEqual(cleanLog(`${E}[31mred${E}[0m and ${E}[1;32mgreen${E}[0m`).steps[0].lines, ['red and green']);
+});
+
+test('L4: the runtime\'s hidden characters (tags, bidi, zero-width) never pass: each is a space', () => {
+  const hidden = ['\u200b', '\u200e', '\u202e', '\u2066', '\u2069', '\ufeff', '\u{e0041}', '\u{e007f}', '\u00ad', '\u061c', '\u180e', '\u2060', '\u3164', '\ufe0f'];
+  const line = 'Error: x' + hidden.join('y') + 'z';
+  const out = cleanLog(`first\n${line}\n`).steps[0].lines[1];
+  const {hiddenClass} = require('countinghouse/lib/conditions-why.json');
+  assert.ok(!new RegExp(`[${hiddenClass}]`, 'u').test(out), JSON.stringify(out));
+  assert.strictEqual(out, 'Error: x' + hidden.map(() => ' ').join('y') + 'z');
+});
+
+test('L4: the hidden class is the runtime\'s own (lib/conditions-why.json hiddenClass)', () => {
+  const {HIDDEN_CLASS} = require('../lib/clean');
+  assert.strictEqual(HIDDEN_CLASS, require('countinghouse/lib/conditions-why.json').hiddenClass);
+});
