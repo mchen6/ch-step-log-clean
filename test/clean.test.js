@@ -417,3 +417,22 @@ test('F1 medium: a hidden character never turns printed text into a group marker
   const {steps} = cleanLog(`##[group]Run\u2800x\n${E}[36;1mx${E}[0m\n##[endgroup]\nok\n`);
   assert.deepStrictEqual(steps.map((s) => s.name), ['Run x']);
 });
+
+// The reviewer's ruling on separators: an invisible character after a
+// secret's name (the word just written) is a space, as the value expects.
+test('a whitespace-like invisible after a secret\'s name is its separator; inside a secret it is removed', () => {
+  const E = '\u001b';
+  const tok = 'abcdefghijklmnopqrstuv0123456789';
+  for (const raw of [`--password\u000b${tok}`, `Bearer ${tok}`, `password=${E}[1C${tok}`, `x Basic\u000c${tok}`]) {
+    const out = redactLib.redactLines(cleanLog(raw).steps[0].lines).lines.join('\n');
+    assert.ok(!out.includes(tok.slice(0, 12)), `${JSON.stringify(raw)} -> ${JSON.stringify(out)}`);
+  }
+  // (inserted mid-secret, it is still removed)
+  assert.deepStrictEqual(cleanLog(`DB_PASSWORD=ab\u000bcd${tok}`).steps[0].lines, [`DB_PASSWORD=abcd${tok}`]);
+});
+
+test('NAME_END is ch-step-redact\'s own', () => {
+  const {NAME_END} = require('../lib/clean');
+  assert.strictEqual(NAME_END.source, redactLib.NAME_END.source);
+  assert.strictEqual(NAME_END.flags, redactLib.NAME_END.flags);
+});
