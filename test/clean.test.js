@@ -97,8 +97,9 @@ test('progress filters drop only progress: real lines that start with a percenta
 
 test('OSC hyperlinks and character-set escapes are stripped too', () => {
   const out = cleanLog(['see \x1b]8;;https://example.com/x\x07the docs\x1b]8;;\x07 now\x1b(B', 'a\x1b]0;title\x1b\\b'].join('\n'));
-  // (an escape between two letters is a space: the medium on L3, 3)
-  assert.deepStrictEqual(out.steps[0].lines, ['see the docs now', 'a b']);
+  // (an escape between two letters is removed, as before: a space goes in
+  // only before a token's head -- the high on #6, F1)
+  assert.deepStrictEqual(out.steps[0].lines, ['see the docs now', 'ab']);
 });
 
 test('a step with no output is still a step; an empty (top) is left out', () => {
@@ -113,7 +114,7 @@ test('an empty log has no steps', () => {
 
 test('warning and error markers are kept, other ansi forms are stripped', () => {
   const out = cleanLog(['\x1b[1m\x1b[31m##[warning]disk almost full\x1b[0m', '##[error]boom', 'x\x1b[2Ky'].join('\n'));
-  assert.deepStrictEqual(out.steps[0].lines, ['##[warning]disk almost full', '##[error]boom', 'x y']);
+  assert.deepStrictEqual(out.steps[0].lines, ['##[warning]disk almost full', '##[error]boom', 'xy']);
 });
 
 test('a 5 MB log is cleaned in well under a second', () => {
@@ -283,13 +284,13 @@ test('L3: every escape sequence goes, and a control left over is a space: no let
   assert.deepStrictEqual(cleanLog(`${E}[31mred${E}[0m and ${E}[1;32mgreen${E}[0m`).steps[0].lines, ['red and green']);
 });
 
-test('L4: the runtime\'s hidden characters (tags, bidi, zero-width) never pass: each is a space', () => {
+test('L4: the runtime\'s hidden characters (tags, bidi, zero-width) never pass: removed, a space only before a token\'s head', () => {
   const hidden = ['\u200b', '\u200e', '\u202e', '\u2066', '\u2069', '\ufeff', '\u{e0041}', '\u{e007f}', '\u00ad', '\u061c', '\u180e', '\u2060', '\u3164', '\ufe0f'];
   const line = 'Error: x' + hidden.join('y') + 'z';
   const out = cleanLog(`first\n${line}\n`).steps[0].lines[1];
   const {hiddenClass} = require('countinghouse/lib/conditions-why.json');
   assert.ok(!new RegExp(`[${hiddenClass}]`, 'u').test(out), JSON.stringify(out));
-  assert.strictEqual(out, 'Error: x' + hidden.map(() => ' ').join('y') + 'z');
+  assert.strictEqual(out, 'Error: x' + 'y'.repeat(hidden.length - 1) + 'z');
 });
 
 test('L4: the hidden class is the runtime\'s own (lib/conditions-why.json hiddenClass)', () => {
@@ -301,7 +302,9 @@ test('L4: the hidden class is the runtime\'s own (lib/conditions-why.json hidden
 test('L3 medium: an escape between a letter and a token is a space; an ESC with intermediates never eats a token\'s first letter', () => {
   const E = '\u001b';
   const ghp = 'ghp_' + 'a1B2'.repeat(9);
-  const lines = [`x${E}[0m${ghp}`, `x\u009d0;t\u009c${ghp}`, `${E} ${ghp}`, `${E}#${ghp}`, `${E}x${ghp}`];
+  // (an ESC, intermediates and a token's first letter: the letter is the
+  // escape's final, as a terminal reads it -- ruled; a 1.1 row)
+  const lines = [`x${E}[0m${ghp}`, `x\u009d0;t\u009c${ghp}`, `${E}x${ghp}`];
   for (const l of cleanLog(lines.join('\n')).steps[0].lines) {
     assert.ok(!redactLib.redactLines([l]).lines[0].includes('a1B2a1B2'), JSON.stringify(l));
   }
@@ -330,4 +333,49 @@ test('L4 medium: a step header is found past hidden characters, in its group lin
     const {steps} = cleanLog(c);
     assert.deepStrictEqual(steps.map((s) => [s.name, s.lines]), [['Run y', ['ok2']]], JSON.stringify(c));
   }
+});
+
+// The reviewer's high on #6 (F1-F3, F5), with its probes' inputs.
+const pipelineMasks = (raw, needle) => {
+  const lines = cleanLog(raw).steps.flatMap((s) => s.lines);
+  const out = redactLib.redactLines(lines).lines.join('\n');
+  return !out.includes(needle);
+};
+test('F1: an escape inside a token or a secret is removed, so ch-step-redact sees it whole', () => {
+  const E = '\u001b';
+  const tok = 'Ab3dEf6h' + 'a1B2'.repeat(7);
+  const cases = [
+    [`src/a.js:3:const t = "${E}[01;31m${E}[Kghp_${E}[m${E}[K${tok}"`, tok],
+    [`password=FAKEpa${E}[7mX${E}[27mrtTwo`, 'rtTwo'],
+    [`mysql -uroot -p${E}[1m${E}[0mFAKEvalueZZ9 app`, 'FAKEvalueZZ9'],
+    [`jwt eyJ${'h'.repeat(17)}.${E}[1meyJ${'y'.repeat(20)}${E}[0m.sig${'x'.repeat(40)}`, 'y'.repeat(20)]
+  ];
+  for (const [raw, needle] of cases) assert.ok(pipelineMasks(raw, needle), JSON.stringify(raw));
+  // (a space still goes in before a token's head after a word: x\e[0mghp_…)
+  const ghp = 'ghp_' + 'a1B2'.repeat(9);
+  assert.deepStrictEqual(redactLib.redactLines(cleanLog(`x${E}[0m${ghp}`).steps[0].lines).lines, ['x <githubToken>']);
+});
+
+test('F2: a character-set designator\'s final byte is always its own', () => {
+  const ghp = 'ghp_' + 'a1B2'.repeat(9);
+  assert.ok(pipelineMasks(`\u001b(B${ghp}`, 'a1B2a1B2'), 'masked');
+});
+
+test('F3: a control inside a value is removed, so the value is masked whole', () => {
+  assert.ok(pipelineMasks('DB_PASSWORD=QJN0j\u000e1zrAwk7K7C1Vegu', '1zrAwk'), 'masked');
+  // (a tab is a space, as before)
+  assert.deepStrictEqual(cleanLog('a\tb').steps[0].lines, ['a b']);
+});
+
+test('F5: an omitted bare key body after a marker leaves ch-step-redact\'s state as the full line would', () => {
+  const b64 = (n, seed) => { const a = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'; let s = ''; let x = seed; for (let i = 0; i < n; i++) { x = (x * 1103515245 + 12345) & 0x7fffffff; s += a[x % 64]; } return s; };
+  const body = [b64(64, 21), b64(64, 22)];
+  const raw = ['##[debug]M' + 'II' + b64(LINE_MAX + 5000, 20), ...body.map((b) => `##[debug]${b}`)];
+  const direct = redactLib.redactLines(raw).lines.join('\n');
+  const viaClean = redactLib.redactLines(cleanLog(raw.join('\n')).steps[0].lines).lines.join('\n');
+  for (const b of body) {
+    assert.ok(!direct.includes(b.slice(0, 30)), 'ch-step-redact alone masks it');
+    assert.ok(!viaClean.includes(b.slice(0, 30)), viaClean.slice(0, 300));
+  }
+  assert.ok(cleanLog(raw.join('\n')).steps[0].lines[0].startsWith('##[debug]'), 'the marker kept');
 });
